@@ -34,10 +34,10 @@ bestDebut moves t = if (total t) < 2
 	then (0.0, moves)
 	else maxBy1 ((fromIntegral (wins t))/(fromIntegral (total t)), (move t):moves) (M.foldr (maxBy1.(bestDebut ((move t):moves))) (0.0, moves) (child t))
 
-worstMove p t = if (total t) == 0 then (0.0, "") else let
+worstMove moves p t = if (total t) == 0 then (0.0, moves) else let
 		cp = (fromIntegral (wins t))/(fromIntegral (total t))
 		deltaProb = abs (cp-p)
-		in maxBy1 (deltaProb, (move t)) (M.foldr (maxBy1.(worstMove cp)) (0.0, "") (child t))
+		in maxBy1 (deltaProb, (move t):moves) (M.foldr (maxBy1.(worstMove ((move t):moves) cp)) (0.0, moves) (child t))
 
 buildTrie lines =
 	let buildTrie' whiteTrie blackTrie lines = case lines of
@@ -67,6 +67,6 @@ main = do
 	prettyPrint w b
 	putStrLn "---\nСамый плохой ход (белые/чёрные):"
 	let (w,b)=P.par x (P.pseq y (x,y)) where
-		x=worstMove 0.5 white
-		y=worstMove 0.5 black
-	putStrLn ((show w) ++ " " ++ (show b))
+		x=worstMove [] 0.5 white
+		y=worstMove [] 0.5 black
+	prettyPrint w b
