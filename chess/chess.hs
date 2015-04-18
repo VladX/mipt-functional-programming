@@ -12,7 +12,8 @@ evenElems (x:xs) n = let t = evenElems xs (n+1) in if even n then x:t else t
 
 wWinner winner = if winner=="1-0" then 1 else 0
 bWinner winner = if winner=="0-1" then 1 else 0
-tuplePlus1 x = let (a,b)=x in (a+1,b)
+
+maxBy1 a b = if (fst a)>(fst b) then a else b
 
 insert win [] t = t
 insert win (k:ks) t = let
@@ -25,14 +26,18 @@ insert win (k:ks) t = let
     	Nothing -> t { wins = newWins, total = newTotal, child = M.insert k (insert win ks childNode) newChildren }
     	Just t' -> t { wins = newWins, total = newTotal, child = M.insert k (insert win ks t') ts }
 
-longestDebut acc t = if (total t) < 2 then (0, acc) else M.foldr (max.tuplePlus1.(longestDebut ((move t):acc))) (0,acc) (child t)
+longestDebut moves t = if (total t) < 2
+	then (0, moves)
+	else M.foldr (maxBy1.(\x->((fst x)+1,snd x)).(longestDebut ((move t):moves))) (0,moves) (child t)
 
-bestDebut t = if (total t) < 2 then 0.0 else max ((fromIntegral (wins t))/(fromIntegral (total t))) (M.foldr (max.bestDebut) 0.0 (child t))
+bestDebut moves t = if (total t) < 2
+	then (0.0, moves)
+	else maxBy1 ((fromIntegral (wins t))/(fromIntegral (total t)), (move t):moves) (M.foldr (maxBy1.(bestDebut ((move t):moves))) (0.0, moves) (child t))
 
-worstMove p t = if (total t) == 0 then 0.0 else let
+worstMove p t = if (total t) == 0 then (0.0, "") else let
 		cp = (fromIntegral (wins t))/(fromIntegral (total t))
 		deltaProb = abs (cp-p)
-		in max deltaProb (M.foldr (max.(worstMove cp)) 0.0 (child t))
+		in maxBy1 (deltaProb, (move t)) (M.foldr (maxBy1.(worstMove cp)) (0.0, "") (child t))
 
 buildTrie lines =
 	let buildTrie' whiteTrie blackTrie lines = case lines of
@@ -41,21 +46,26 @@ buildTrie lines =
 			in buildTrie' (insert (wWinner winner) (evenElems moves 0) whiteTrie) (insert (bWinner winner) (evenElems moves 1) blackTrie) (drop 2 lines)
 	in buildTrie' emptyTrie emptyTrie lines
 
+prettyPrint w b = do
+	let print x = let (val, moves)=(fst x, tail (reverse (snd x))) in putStrLn ((show val) ++ "; Ходы: " ++ (show moves))
+	print w
+	print b
+
 main = do
 	contents <- readFile "moves.txt"
 	let lines = map T.unpack (T.splitOn (T.pack "\n") (T.pack contents))
 	let (white, black) = buildTrie lines
 	putStrLn "Самый длинный дебют (белые/чёрные):"
 	let (w,b)=P.par x (P.pseq y (x,y)) where
-		x=snd (longestDebut [] white)
-		y=snd (longestDebut [] black)
-	putStrLn ((show w) ++ " " ++ (show b))
-	putStrLn "Дебюты, имееющие наибольшую вероятность выигрыша (белые/чёрные):"
+		x=longestDebut [] white
+		y=longestDebut [] black
+	prettyPrint w b
+	putStrLn "---\nДебюты, имееющие наибольшую вероятность выигрыша (белые/чёрные):"
 	let (w,b)=P.par x (P.pseq y (x,y)) where
-		x=bestDebut white
-		y=bestDebut black
-	putStrLn ((show w) ++ " " ++ (show b))
-	putStrLn "Самый плохой ход (белые/чёрные):"
+		x=bestDebut [] white
+		y=bestDebut [] black
+	prettyPrint w b
+	putStrLn "---\nСамый плохой ход (белые/чёрные):"
 	let (w,b)=P.par x (P.pseq y (x,y)) where
 		x=worstMove 0.5 white
 		y=worstMove 0.5 black
