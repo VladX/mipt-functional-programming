@@ -3,9 +3,9 @@ import qualified Control.Parallel as P
 import qualified Data.Text as T
 import qualified Data.Map as M
 
-data Trie = Trie { wins :: Int, total :: Int, move :: String, child :: M.Map String (Trie) } deriving (Show)
+data Trie = Trie { wins :: Int, total :: Int, move :: (String, String), child :: M.Map String (Trie) } deriving (Show)
 
-emptyTrie = Trie { wins = 0, total = 0, move = "", child = M.empty }
+emptyTrie = Trie { wins = 0, total = 0, move = ("", ""), child = M.empty }
 
 evenElems [] _ = []
 evenElems (x:xs) n = let t = evenElems xs (n+1) in if even n then x:t else t
@@ -18,13 +18,14 @@ maxBy1 a b = if (fst a)>(fst b) then a else b
 insert win [] t = t
 insert win (k:ks) t = let
 	ts = child t
+	k0 = fst k
 	childNode = emptyTrie { move = k }
-	newChildren = M.insert k childNode ts
+	newChildren = M.insert k0 childNode ts
 	newWins = (wins t) + win
 	newTotal = (total t) + 1
-    in case M.lookup k ts of
-    	Nothing -> t { wins = newWins, total = newTotal, child = M.insert k (insert win ks childNode) newChildren }
-    	Just t' -> t { wins = newWins, total = newTotal, child = M.insert k (insert win ks t') ts }
+    in case M.lookup k0 ts of
+    	Nothing -> t { wins = newWins, total = newTotal, child = M.insert k0 (insert win ks childNode) newChildren }
+    	Just t' -> t { wins = newWins, total = newTotal, child = M.insert k0 (insert win ks t') ts }
 
 longestDebut moves t = if (total t) < 2
 	then (0, moves)
@@ -42,8 +43,10 @@ worstMove moves p t = if (total t) == 0 then (0.0, moves) else let
 buildTrie lines =
 	let buildTrie' whiteTrie blackTrie lines = case lines of
 		[] -> (whiteTrie, blackTrie)
-		lines -> let (winner, moves) = (lines!!0, words (lines!!1))
-			in buildTrie' (insert (wWinner winner) (evenElems moves 0) whiteTrie) (insert (bWinner winner) (evenElems moves 1) blackTrie) (drop 2 lines)
+		lines -> let
+			(winner, moves) = (lines!!0, words (lines!!1))
+			(wMoves, bMoves) = (evenElems moves 0, evenElems moves 1)
+			in buildTrie' (insert (wWinner winner) (zip wMoves bMoves) whiteTrie) (insert (bWinner winner) (zip bMoves wMoves) blackTrie) (drop 2 lines)
 	in buildTrie' emptyTrie emptyTrie lines
 
 prettyPrint w b = do
