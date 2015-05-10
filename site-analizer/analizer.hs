@@ -40,16 +40,19 @@ makeAbsolute domain link = if (take 2 link)=="//"
 		then ("http://" ++ domain ++ link)
 		else link
 
-pageRank :: Float -> String -> M.Map String Float -> M.Map String (S.Set String) -> M.Map String (S.Set String) -> Float
-pageRank d url memorize edges edgesTo = case M.lookup url memorize of
-	Nothing -> let numOfEdges=(fromIntegral (M.size edges)) in
-		((1.0-d)/numOfEdges) + d * (
-			S.foldr (
-				\x acc->
-				((pageRank d x (M.insert url 0.0 memorize) edges edgesTo) / (fromIntegral (max 1 (S.size (M.findWithDefault S.empty x edges))))) + acc
-			) (1.0/numOfEdges) (M.findWithDefault S.empty url edgesTo)
-		)
-	Just x -> x
+pageRank d url edges edgesTo =
+	let pageRank' memorize d url edges edgesTo = case M.lookup url memorize of
+		Nothing -> let
+			numOfEdges=(fromIntegral (M.size edges))
+			degree x=fromIntegral (max 1 (S.size (M.findWithDefault S.empty x edges)))
+			(sumPr,m)=S.foldr (
+					\x (acc, mem)->let (p,m)=pageRank' (M.insert url 0.0 mem) d x edges edgesTo in
+					((p / (degree x)) + acc, m)
+				) (1.0/(degree url), memorize) (M.findWithDefault S.empty url edgesTo)
+			pr=((1.0-d)/numOfEdges)+d*sumPr
+			in (pr, M.insert url pr m)
+		Just x -> (x, memorize)
+	in fst (pageRank' M.empty d url edges edgesTo)
 
 analize :: String -> IO [(String, Float, Float)]
 analize url = do
@@ -76,7 +79,7 @@ analize url = do
 	mapM_ (\(x,y)->mapM_ (\y->hPutStrLn h ("\"" ++ x ++ "\" -> \"" ++ y ++ "\";")) (S.toList y)) (M.toList edges)
 	hPutStrLn h "}"
 	hClose h
-	return (DL.sortBy (\(_,a,_) (_,b,_)->b `compare` a) (map (\(x,y)->(x,y,pageRank 0.85 x M.empty edges edgesTo)) (M.toList ans)))
+	return (DL.sortBy (\(_,a,_) (_,b,_)->b `compare` a) (map (\(x,y)->(x,y,pageRank 0.85 x edges edgesTo)) (M.toList ans)))
 
 main = do
 	putStrLn "Page URL:"
