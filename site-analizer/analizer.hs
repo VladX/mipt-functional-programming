@@ -40,27 +40,43 @@ makeAbsolute domain link = if (take 2 link)=="//"
 		then ("http://" ++ domain ++ link)
 		else link
 
-analize :: String -> IO [(String, Float)]
+pageRank :: Float -> String -> M.Map String Float -> M.Map String (S.Set String) -> M.Map String (S.Set String) -> Float
+pageRank d url memorize edges edgesTo = case M.lookup url memorize of
+	Nothing -> let numOfEdges=(fromIntegral (M.size edges)) in
+		((1.0-d)/numOfEdges) + d * (
+			S.foldr (
+				\x acc->
+				((pageRank d x (M.insert url 0.0 memorize) edges edgesTo) / (fromIntegral (max 1 (S.size (M.findWithDefault S.empty x edges))))) + acc
+			) (1.0/numOfEdges) (M.findWithDefault S.empty url edgesTo)
+		)
+	Just x -> x
+
+analize :: String -> IO [(String, Float, Float)]
 analize url = do
-	let analize' visited answer edges url = do
+	let analize' visited answer edges edgesTo url = do
 		let (domain, path) = splitUrl url
 		putStrLn ("Processing URL: " ++ url)
 		links <- getLinks url
 		let filteredLinks = filter (\x->domain==(getDomain (fst x))) (map (\(x,y)->(makeAbsolute domain x, y)) links) -- Оставляем только ссылки на одинаковый домен
 		let adjustAnswer (l, w) m = M.insertWith (+) (getPath l) w m
-		let insertEdge (l, _) m = M.insert path (getPath l) m
-		let traverseLinksGraph m l = let (v, a, e) = m in
+		let insertEdge (l, _) m = case M.lookup path m of
+			Nothing -> M.insert path (S.singleton (getPath l)) m
+			Just x -> M.insert path (S.insert (getPath l) x) m
+		let insertEdgeTo (l, _) m = let p=(getPath l) in case M.lookup p m of
+			Nothing -> M.insert p (S.singleton path) m
+			Just x -> M.insert p (S.insert path x) m
+		let traverseLinksGraph m l = let (v, a, e, et) = m in
 			if S.member (getPath l) v -- Только ссылки, в которых мы ещё не были
 				then return m
-				else analize' v a e l
-		foldM traverseLinksGraph (S.insert path visited, foldr adjustAnswer answer filteredLinks, foldr insertEdge edges filteredLinks) (map fst filteredLinks)
-	(_,ans,edges) <- analize' S.empty M.empty M.empty url
+				else analize' v a e et l
+		foldM traverseLinksGraph (S.insert path visited, foldr adjustAnswer answer filteredLinks, foldr insertEdge edges filteredLinks, foldr insertEdgeTo edgesTo filteredLinks) (map fst filteredLinks)
+	(_,ans,edges,edgesTo) <- analize' S.empty M.empty M.empty M.empty url
 	h <- openFile "graph.dot" WriteMode
 	hPutStrLn h "digraph G {"
-	mapM_ (\(x,y)->hPutStrLn h ("\"" ++ x ++ "\" -> \"" ++ y ++ "\";")) (M.toList edges)
+	mapM_ (\(x,y)->mapM_ (\y->hPutStrLn h ("\"" ++ x ++ "\" -> \"" ++ y ++ "\";")) (S.toList y)) (M.toList edges)
 	hPutStrLn h "}"
 	hClose h
-	return (DL.sortBy (\(_,a) (_,b)->b `compare` a) (M.toList ans))
+	return (DL.sortBy (\(_,a,_) (_,b,_)->b `compare` a) (map (\(x,y)->(x,y,pageRank 0.85 x M.empty edges edgesTo)) (M.toList ans)))
 
 main = do
 	putStrLn "Page URL:"
